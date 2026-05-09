@@ -1,35 +1,23 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const chromium = require('chromium');
 const cheerio = require('cheerio');
 const axios = require('axios');
 
-// Configure Puppeteer for different environments
+// Works on both local and Render — chromium package bundles its own binary
 async function getPuppeteerConfig() {
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  if (isProduction) {
-    // On Render, puppeteer downloads chrome to a cache dir during build
-    // Find the executable path dynamically
-    const { executablePath } = require('puppeteer');
-    return {
-      headless: 'new',
-      executablePath: executablePath(),
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-extensions'
-      ]
-    };
-  }
-
-  // Local development — use bundled Chromium
   return {
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+    executablePath: chromium.path,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-extensions'
+    ]
   };
 }
 
@@ -100,12 +88,14 @@ async function runLighthouse(url) {
       return await runPageSpeedInsights(url);
     }
 
-    // Local: use real Lighthouse
+    // Local: use real Lighthouse with chromium binary
     const { default: lighthouse } = await import('lighthouse');
     const { launch } = await import('chrome-launcher');
+    const chromium = require('chromium');
 
     const chrome = await launch({
-      chromeFlags: ['--headless', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
+      chromeFlags: ['--headless', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+      chromePath: chromium.path
     });
 
     let runnerResult;
