@@ -7,22 +7,8 @@ function getPuppeteerConfig() {
   const isRender = process.env.RENDER || process.env.NODE_ENV === 'production';
   
   if (isRender) {
-    return {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-extensions'
-      ],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable'
-    };
+    // Skip Puppeteer on Render - Chrome installation is complex
+    throw new Error('Puppeteer disabled on Render - using fallback crawler');
   }
   
   // Local development
@@ -92,32 +78,27 @@ async function crawlWebsite(url) {
 
 async function runLighthouse(url) {
   try {
+    // Check if we're in an environment without Chrome
+    const isRender = process.env.RENDER || process.env.NODE_ENV === 'production';
+    
+    if (isRender) {
+      // Skip Lighthouse on Render if Chrome is not available
+      console.log('Skipping Lighthouse - Chrome not available in this environment');
+      return null;
+    }
+
     const { default: lighthouse } = await import('lighthouse');
     const { launch } = await import('chrome-launcher');
 
-    const isRender = process.env.RENDER || process.env.NODE_ENV === 'production';
-    
     const chromeFlags = [
       '--headless',
       '--no-sandbox',
       '--disable-gpu',
       '--disable-dev-shm-usage'
     ];
-    
-    if (isRender) {
-      chromeFlags.push(
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-extensions'
-      );
-    }
 
     const chrome = await launch({
-      chromeFlags,
-      chromePath: isRender ? (process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable') : undefined
+      chromeFlags
     });
 
     let runnerResult;

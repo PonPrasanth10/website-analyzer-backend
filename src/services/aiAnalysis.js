@@ -86,7 +86,7 @@ Lighthouse Scores:
 - CLS: ${lighthouseData.metrics?.cls?.toFixed(3)}
 - FCP: ${(lighthouseData.metrics?.fcp / 1000).toFixed(2)}s
 - TTFB: ${(lighthouseData.metrics?.ttfb / 1000).toFixed(2)}s
-` : 'Lighthouse data unavailable.';
+` : 'Lighthouse data unavailable - focus on SEO and content analysis.';
 
     const prompt = `You are a senior UX/SEO/conversion consultant and web performance expert.
 

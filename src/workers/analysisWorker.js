@@ -28,6 +28,9 @@ async function processAnalysisJob(job) {
     try {
       console.log(`[Job ${job.id}] Running Lighthouse`);
       lighthouseData = await runLighthouse(url);
+      if (!lighthouseData) {
+        console.log(`[Job ${job.id}] Lighthouse skipped - Chrome not available`);
+      }
     } catch (lighthouseError) {
       console.log(`[Job ${job.id}] Lighthouse failed, skipping:`, lighthouseError.message);
       lighthouseData = null;
