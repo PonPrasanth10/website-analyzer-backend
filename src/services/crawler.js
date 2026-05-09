@@ -78,27 +78,19 @@ async function crawlWebsite(url) {
 
 async function runLighthouse(url) {
   try {
-    // Check if we're in an environment without Chrome
     const isRender = process.env.RENDER || process.env.NODE_ENV === 'production';
-    
+
+    // On Render (or any production env without Chrome), use PageSpeed Insights API
     if (isRender) {
-      // Skip Lighthouse on Render if Chrome is not available
-      console.log('Skipping Lighthouse - Chrome not available in this environment');
-      return null;
+      return await runPageSpeedInsights(url);
     }
 
+    // Local: use real Lighthouse
     const { default: lighthouse } = await import('lighthouse');
     const { launch } = await import('chrome-launcher');
 
-    const chromeFlags = [
-      '--headless',
-      '--no-sandbox',
-      '--disable-gpu',
-      '--disable-dev-shm-usage'
-    ];
-
     const chrome = await launch({
-      chromeFlags
+      chromeFlags: ['--headless', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
     });
 
     let runnerResult;
@@ -132,6 +124,51 @@ async function runLighthouse(url) {
     };
   } catch (err) {
     console.error('Lighthouse error:', err.message);
+    return null;
+  }
+}
+
+// PageSpeed Insights API — runs Lighthouse on Google's servers, no Chrome needed
+async function runPageSpeedInsights(url) {
+  try {
+    const apiKey = process.env.PAGESPEED_API_KEY || '';
+    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed`;
+
+    // Run mobile and desktop in parallel
+    const [desktopRes] = await Promise.all([
+      axios.get(apiUrl, {
+        params: {
+          url,
+          strategy: 'desktop',
+          category: ['performance', 'accessibility', 'best-practices', 'seo'],
+          ...(apiKey && { key: apiKey })
+        },
+        timeout: 60000
+      })
+    ]);
+
+    const lhr = desktopRes.data.lighthouseResult;
+    const cats = lhr.categories;
+    const audits = lhr.audits;
+
+    console.log('PageSpeed Insights data fetched successfully');
+
+    return {
+      performance: Math.round((cats.performance?.score || 0) * 100),
+      accessibility: Math.round((cats.accessibility?.score || 0) * 100),
+      bestPractices: Math.round((cats['best-practices']?.score || 0) * 100),
+      seo: Math.round((cats.seo?.score || 0) * 100),
+      metrics: {
+        lcp: audits['largest-contentful-paint']?.numericValue || 0,
+        cls: audits['cumulative-layout-shift']?.numericValue || 0,
+        fid: audits['max-potential-fid']?.numericValue || 0,
+        fcp: audits['first-contentful-paint']?.numericValue || 0,
+        ttfb: audits['server-response-time']?.numericValue || 0,
+        speedIndex: audits['speed-index']?.numericValue || 0,
+      },
+    };
+  } catch (err) {
+    console.error('PageSpeed Insights error:', err.message);
     return null;
   }
 }
