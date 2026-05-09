@@ -139,28 +139,23 @@ async function runPageSpeedInsights(url) {
     const apiKey = process.env.PAGESPEED_API_KEY || '';
     const apiUrl = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
 
-    const params = {
-      url,
-      strategy: 'desktop',
-      category: ['performance', 'accessibility', 'best-practices', 'seo'],
-    };
+    // Build query string manually — API requires repeated params not array notation
+    const categories = ['performance', 'accessibility', 'best-practices', 'seo'];
+    const categoryParams = categories.map(c => `category=${c}`).join('&');
+    const keyParam = apiKey ? `&key=${apiKey}` : '';
+    const fullUrl = `${apiUrl}?url=${encodeURIComponent(url)}&strategy=desktop&${categoryParams}${keyParam}`;
 
-    // Only add key if provided — without key: 25 req/day, with key: 25,000 req/day
-    if (apiKey) params.key = apiKey;
-
-    const res = await axios.get(apiUrl, { params, timeout: 60000 });
+    const res = await axios.get(fullUrl, { timeout: 60000 });
 
     const lhr = res.data.lighthouseResult;
     const cats = lhr.categories;
     const audits = lhr.audits;
 
-    console.log('PageSpeed Insights data fetched successfully');
-
-    return {
-      performance: Math.round((cats.performance?.score || 0) * 100),
-      accessibility: Math.round((cats.accessibility?.score || 0) * 100),
-      bestPractices: Math.round((cats['best-practices']?.score || 0) * 100),
-      seo: Math.round((cats.seo?.score || 0) * 100),
+    const result = {
+      performance: Math.round((cats['performance']?.score ?? 0) * 100),
+      accessibility: Math.round((cats['accessibility']?.score ?? 0) * 100),
+      bestPractices: Math.round((cats['best-practices']?.score ?? 0) * 100),
+      seo: Math.round((cats['seo']?.score ?? 0) * 100),
       metrics: {
         lcp: audits['largest-contentful-paint']?.numericValue || 0,
         cls: audits['cumulative-layout-shift']?.numericValue || 0,
@@ -170,6 +165,9 @@ async function runPageSpeedInsights(url) {
         speedIndex: audits['speed-index']?.numericValue || 0,
       },
     };
+
+    console.log('PageSpeed Insights scores:', result.performance, result.accessibility, result.bestPractices, result.seo);
+    return result;
   } catch (err) {
     if (err.response?.status === 429) {
       console.error('PageSpeed Insights rate limit hit. Add PAGESPEED_API_KEY env variable for 25,000 req/day.');
