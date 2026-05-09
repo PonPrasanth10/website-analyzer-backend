@@ -1,5 +1,5 @@
-# Use Node.js 18 LTS
-FROM node:18-alpine
+# Use Node.js 20 LTS (fixes undici File global issue)
+FROM node:20-alpine
 
 # Install Chrome dependencies for Puppeteer/Lighthouse
 RUN apk add --no-cache \

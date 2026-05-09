@@ -1,4 +1,16 @@
 require('dotenv').config();
+
+// Polyfill for File global (fixes undici compatibility)
+if (typeof globalThis.File === 'undefined') {
+  globalThis.File = class File {
+    constructor(fileBits, fileName, options = {}) {
+      this.name = fileName;
+      this.type = options.type || '';
+      this.lastModified = options.lastModified || Date.now();
+    }
+  };
+}
+
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
