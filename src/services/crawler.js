@@ -3,17 +3,32 @@ const cheerio = require('cheerio');
 const axios = require('axios');
 
 // Configure Puppeteer for different environments
-function getPuppeteerConfig() {
-  const isRender = process.env.RENDER || process.env.NODE_ENV === 'production';
-  
-  if (isRender) {
-    // Skip Puppeteer on Render - Chrome installation is complex
-    throw new Error('Puppeteer disabled on Render - using fallback crawler');
+async function getPuppeteerConfig() {
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if (isProduction) {
+    // On Render, puppeteer downloads chrome to a cache dir during build
+    // Find the executable path dynamically
+    const { executablePath } = require('puppeteer');
+    return {
+      headless: 'new',
+      executablePath: executablePath(),
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-extensions'
+      ]
+    };
   }
-  
-  // Local development
+
+  // Local development — use bundled Chromium
   return {
-    headless: true,
+    headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
   };
 }
@@ -21,7 +36,7 @@ function getPuppeteerConfig() {
 async function crawlWebsite(url) {
   let browser;
   try {
-    const config = getPuppeteerConfig();
+    const config = await getPuppeteerConfig();
     browser = await puppeteer.launch(config);
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
@@ -132,22 +147,20 @@ async function runLighthouse(url) {
 async function runPageSpeedInsights(url) {
   try {
     const apiKey = process.env.PAGESPEED_API_KEY || '';
-    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed`;
+    const apiUrl = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
 
-    // Run mobile and desktop in parallel
-    const [desktopRes] = await Promise.all([
-      axios.get(apiUrl, {
-        params: {
-          url,
-          strategy: 'desktop',
-          category: ['performance', 'accessibility', 'best-practices', 'seo'],
-          ...(apiKey && { key: apiKey })
-        },
-        timeout: 60000
-      })
-    ]);
+    const params = {
+      url,
+      strategy: 'desktop',
+      category: ['performance', 'accessibility', 'best-practices', 'seo'],
+    };
 
-    const lhr = desktopRes.data.lighthouseResult;
+    // Only add key if provided — without key: 25 req/day, with key: 25,000 req/day
+    if (apiKey) params.key = apiKey;
+
+    const res = await axios.get(apiUrl, { params, timeout: 60000 });
+
+    const lhr = res.data.lighthouseResult;
     const cats = lhr.categories;
     const audits = lhr.audits;
 
@@ -168,7 +181,11 @@ async function runPageSpeedInsights(url) {
       },
     };
   } catch (err) {
-    console.error('PageSpeed Insights error:', err.message);
+    if (err.response?.status === 429) {
+      console.error('PageSpeed Insights rate limit hit. Add PAGESPEED_API_KEY env variable for 25,000 req/day.');
+    } else {
+      console.error('PageSpeed Insights error:', err.message);
+    }
     return null;
   }
 }
